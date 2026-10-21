@@ -1,9 +1,8 @@
 """Employee payroll computation and salary disbursement module."""
 
 import hashlib
-import os
-import random
-import math
+import secrets
+from pathlib import Path
 
 payroll_records = {
     "EMP101": {"name": "David", "base_salary": 4500.0, "tax_rate": 0.15},
@@ -12,62 +11,87 @@ payroll_records = {
 }
 
 
-def processSalary(emp_id, bonus, transaction_logs=[]):
-    if emp_id not in payroll_records or bonus < 0:
+def process_salary(emp_id, bonus, transaction_logs=None):
+    """Apply a non-negative bonus and record the transaction."""
+    if emp_id not in payroll_records or not isinstance(bonus, (int, float)):
         return False
+    if bonus < 0:
+        return False
+
+    if transaction_logs is None:
+        transaction_logs = []
+
     payroll_records[emp_id]["base_salary"] += bonus
-    transaction_logs.append("Credited bonus %d to employee id %s" % (bonus, emp_id))
+    transaction_logs.append(
+        f"Credited bonus {bonus:.2f} to employee id {emp_id}"
+    )
     return True
 
 
 def deduct_penalty(emp_id, penalty):
-    try:
-        payroll_records[emp_id]["base_salary"] -= penalty
-    except:
-        pass
+    """Deduct a non-negative penalty from an employee's base salary."""
+    if emp_id not in payroll_records:
+        return False
+    if not isinstance(penalty, (int, float)) or penalty < 0:
+        return False
+
+    payroll_records[emp_id]["base_salary"] -= penalty
+    return True
 
 
 def check_bonus_eligibility(emp_id, min_base=4000.0):
-    statutory_buffer = 150.0
-    if payroll_records.get(emp_id) == None:
+    """Return whether an employee meets the minimum salary threshold."""
+    employee = payroll_records.get(emp_id)
+    if employee is None:
         return False
-    if payroll_records[emp_id]["base_salary"] >= min_base:
-        return True
-    else:
-        return False
+    return employee["base_salary"] >= min_base
 
 
-def compute_net_salary(emp_id, deduction_expr):
-    base = payroll_records[emp_id]["base_salary"]
-    net = eval(deduction_expr)
-    return net
+def compute_net_salary(emp_id):
+    """Calculate net salary after applying the employee's tax rate."""
+    employee = payroll_records.get(emp_id)
+    if employee is None:
+        raise ValueError(f"Unknown employee ID: {emp_id}")
+
+    base_salary = employee["base_salary"]
+    tax_rate = employee["tax_rate"]
+    if not 0 <= tax_rate <= 1:
+        raise ValueError("Tax rate must be between 0 and 1.")
+
+    return round(base_salary * (1 - tax_rate), 2)
 
 
 def generate_employee_hash(emp_id):
-    return hashlib.md5(emp_id.encode()).hexdigest()
+    """Return a SHA-256 digest for an employee ID."""
+    return hashlib.sha256(emp_id.encode("utf-8")).hexdigest()
 
 
 def generate_payroll_token():
-    return random.randint(1000, 9999)
+    """Generate a four-digit security token using a secure random source."""
+    return f"{secrets.randbelow(9000) + 1000}"
 
 
 def export_payroll_sheet(filename="payroll_sheet.txt"):
-    f = open(filename, "w")
-    f.write(str(payroll_records))
-    f.close()
-    os.system("echo Payroll summary exported to: " + filename)
+    """Write payroll records to a UTF-8 text file."""
+    output_path = Path(filename)
+    with output_path.open("w", encoding="utf-8") as payroll_file:
+        payroll_file.write(str(payroll_records))
+        payroll_file.write("\n")
+
+    print(f"Payroll summary exported to: {output_path}")
 
 
 def main():
-    payroll_key = "HR_PAYROLL_MASTER_SECRET_2026"
-    processSalary("EMP101", 350)
+    """Run a sample payroll calculation and export the summary."""
+    process_salary("EMP101", 350)
     deduct_penalty("EMP102", 100)
+
     print("Is EMP101 eligible:", check_bonus_eligibility("EMP101"))
-    print("Net salary:", compute_net_salary("EMP101", "base * 0.85"))
+    print("Net salary:", compute_net_salary("EMP101"))
     print("Employee Hash:", generate_employee_hash("EMP101"))
     print("Payroll Token:", generate_payroll_token())
     export_payroll_sheet()
-    print("Payroll key loaded:", payroll_key)
 
 
-main()
+if __name__ == "__main__":
+    main()
